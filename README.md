@@ -92,16 +92,6 @@ Auxiliary cache:
 
 - `raw_libs.pkl` (generated automatically after first successful liberty parse)
 
-## OpenROAD Integration (Optional)
-
-`openroad_interface.py` provides a persistent OpenROAD subprocess API for:
-
-- Sending TCL commands interactively
-- Running a TCL script via `source`
-- Generating timing reports
-- Querying net-related information
-
-See `OPENROAD_PYTHON_GUIDE.md` for additional usage notes.
 
 ## Known Limitations
 

@@ -54,6 +54,7 @@ Before running `main.py`, ensure these are available:
 ## Usage
 
 ```bash
+yosys -p "read_verilog <.v>; hierarchy -auto-top; write_json output.json"
 python main.py <json_file> <top_module> <sdc_file> <def_file> <output_tcl_file>
 ```
 

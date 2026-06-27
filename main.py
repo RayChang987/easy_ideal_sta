@@ -7,8 +7,8 @@ from parse_sdf import load_sdf
 from parse_cell_rank import load_gate_rank
 from parse_lib import load_libs
 from build_graph import build_timing_graph
-from resizer import optimize
-
+from read_def import read_def
+from propagation import calculate_delay, calculate_node
 LIB_CACHE_FILE = "raw_libs.pkl"
 CSV_FILE = "gate_ranking_all_cells_analysis.csv"
 if __name__ == "__main__":
@@ -24,10 +24,6 @@ if __name__ == "__main__":
     sdc_file = sys.argv[3]
     def_file = sys.argv[4]
     output_tcl_file = sys.argv[5]
-    # sdf_file = sys.argv[5]
-    # version = ""
-    # if len(sys.argv) == 7:
-    #     version = sys.argv[6].lower()
 
     sdc_info = load_sdc(sdc_file)
     raw_libs = load_libs(LIB_CACHE_FILE)
@@ -45,20 +41,18 @@ if __name__ == "__main__":
         print("[FAIL] Graph contains cycles or is empty.")
 
     print("Running Delay Calculation...")
-    # sdf_file = 'aes_cipher_top.sdf'
-    # sdf_data = load_sdf(sdf_file)
-
-
 
     gate_rank, cell_lookup, type_to_cells = load_gate_rank(CSV_FILE)
 
-    optimize(
+    print("Reading DEF for wire length estimation...")
+    _, net_wl = read_def(def_file)
+
+    violation_end_points = calculate_delay(
         topo_order=order,
         cell_db=cell_db,
-        sdc_info=sdc_info,
+        sdc_data=sdc_info,
         inst_to_clocks=tg.instance_to_clocks,
         p2p_delay=None,
-        cell_lookup=cell_lookup,
         type_to_cells=type_to_cells,
-        output_file=output_tcl_file,
+        net_wl=net_wl,
     )

@@ -26,46 +26,75 @@ It builds a timing graph, propagates delay/slack, and generates an OpenROAD-comp
 
 ## Requirements
 
-- Python 3.10+ (tested in Python 3.12 virtual environment)
+- Python 3.8+ (tested on Python 3.8.12)
+- Docker (for Yosys netlist conversion)
 - Linux environment (OpenROAD workflow assumptions)
 - Python packages from `requirements.txt`
 
-Install dependencies:
+## Setup
+
+### 1. Create virtual environment and install dependencies
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
 ```
+
+### 2. Start the Yosys container (first time only)
+
+```bash
+docker run -d --name yosys \
+  -v /path/to/ISPD26-Contest:/work \
+  hdlc/yosys \
+  sleep infinity
+```
+
+### 3. ASAP7 liberty files
+
+Place ASAP7 liberty files under `ISPD26-Contest/Platform/ASAP7/lib/` in the project root. The expected files are listed in `read_lib.py`.
 
 ## Required Input Data
 
 Before running `main.py`, ensure these are available:
 
-1. Netlist JSON file (contains `modules` and target top module)
+1. Netlist JSON file in Yosys format (contains `modules` key)
 2. Top module name (must match a module in JSON)
 3. SDC file
 4. DEF file path (accepted by CLI; currently not consumed in `main.py` logic)
 5. Output TCL path
 6. `gate_ranking_all_cells_analysis.csv` in project root
-7. ASAP7 liberty files under:
-   - `/ISPD26-Contest/Platform/ASAP7/lib`
-
-> Note: `read_lib.py` currently uses a hardcoded liberty directory. If your libraries are elsewhere, edit `read_lib.py`.
+7. ASAP7 liberty files under `ISPD26-Contest/Platform/ASAP7/lib/`
 
 ## Usage
 
+### Step 1 — Convert Verilog to Yosys JSON netlist
+
 ```bash
-yosys -p "read_verilog <.v>; hierarchy -auto-top; write_json output.json"
-python main.py <json_file> <top_module> <sdc_file> <def_file> <output_tcl_file>
+docker exec yosys yosys -p \
+  "read_verilog /work/<testcase>/contest.v; hierarchy -auto-top; write_json /work/<testcase>/netlist.json"
 ```
 
-Example:
+### Step 2 — Run STA and sizing
 
 ```bash
-python main.py \
-  aes_cipher_top.json \
+venv/bin/python main.py <json_file> <top_module> <sdc_file> <def_file> <output_tcl_file>
+```
+
+### Example (aes_cipher_top)
+
+```bash
+# Generate netlist
+docker exec yosys yosys -p \
+  "read_verilog /work/aes_cipher_top/TCP_250_UTIL_0.40/contest.v; \
+   hierarchy -auto-top; \
+   write_json /work/aes_cipher_top/TCP_250_UTIL_0.40/aes_cipher_top_netlist.json"
+
+# Run STA
+venv/bin/python main.py \
+  ISPD26-Contest/aes_cipher_top/TCP_250_UTIL_0.40/aes_cipher_top_netlist.json \
   aes_cipher_top \
-  /path/to/contest.sdc \
-  /path/to/contest.def \
+  ISPD26-Contest/aes_cipher_top/TCP_250_UTIL_0.40/contest.sdc \
+  ISPD26-Contest/aes_cipher_top/TCP_250_UTIL_0.40/contest.def \
   resize_result.tcl
 ```
 
@@ -91,22 +120,21 @@ replace_cell <instance_name> <new_cell_name>
 
 Auxiliary cache:
 
-- `raw_libs.pkl` (generated automatically after first successful liberty parse)
-
+- `raw_libs.pkl` (generated automatically after first successful liberty parse; reused on subsequent runs)
 
 ## Known Limitations
 
-- Liberty path is hardcoded in `read_lib.py`
 - Current optimizer in `resizer.py` runs a minimal iteration strategy (`MAX_IT = 1`)
 - `def_file` argument is currently passed through CLI but not used by `main.py`
-- `run_all.bash` appears to target an older invocation form and may require updates
+- Wire delay is currently modeled as zero (net arcs add 0 delay)
 
 ## Troubleshooting
 
 - **"No libraries loaded. Exiting."**
-  - Check liberty file path and file availability
-- **Module not found in JSON**
-  - Verify `<top_module>` matches JSON module name exactly
+  - Check that liberty files exist under `ISPD26-Contest/Platform/ASAP7/lib/`
+- **"Module not found in JSON"**
+  - Verify `<top_module>` matches the JSON module name exactly
+  - Confirm the JSON was produced by Yosys (`write_json`) and contains a `modules` key
 - **CSV loading errors**
   - Confirm `gate_ranking_all_cells_analysis.csv` exists and has expected columns:
     `Target_Cell_Type`, `Cell_Name`, `Delay_Raw`, `Power_Raw`

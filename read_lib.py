@@ -4,7 +4,7 @@ from liberty.parser import parse_multi_liberty
 
 def read_lib():
     # Read and parse a library.
-    lib_dir = "/ISPD26-Contest/Platform/ASAP7/lib"
+    lib_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ISPD26-Contest/Platform/ASAP7/lib")
     lib_files = [
         f"{lib_dir}/asap7sc7p5t_AO_LVT_TT_nldm_211120.lib",
         f"{lib_dir}/asap7sc7p5t_AO_RVT_TT_nldm_211120.lib",

@@ -1,6 +1,5 @@
 import heapq
-from lefdef import C_DefReader
-import sys
+import re
 
 
 # === 1. 增加 RMST (最小生成樹) 演算法 ===
@@ -107,82 +106,120 @@ def basic_prim(pts):
 
 # === Main Function ===
 def read_def(file_path):
-    def_reader = C_DefReader()
-    _def = def_reader.read(file_path)
-    nets = _def.c_nets
-    pins = _def.c_pins
-    components = _def.c_components
+    """Parse a DEF file without external dependencies.
 
-    component_id = {}
-    pin_id = {}
+    Returns:
+        component_pos: dict  "inst/pin" → (x, y)  (uses cell origin as pin position)
+        pin_wl:        dict  "inst/pin" → RMST wire length in DEF units
+    """
+    inst_pos = {}   # inst_name  → (x, y)  from COMPONENTS
+    port_pos = {}   # port_name  → (x, y)  from PINS
 
-    for i in range(_def.c_num_components):
-        id = components[i].c_id
-
-        component_id[id] = components[i]
-
-
-    for i in range(_def.c_num_pins):
-        name = pins[i].c_name
-        pin_id[name] = pins[i]
+    # ------------------------------------------------------------------ #
+    # Pass 1 — single scan: collect positions and process nets on the fly  #
+    # ------------------------------------------------------------------ #
+    _PLACED_RE = re.compile(r'(?:PLACED|FIXED)\s+\(\s*(-?\d+)\s+(-?\d+)\s*\)')
+    _PAIR_RE   = re.compile(r'\(\s*(\S+)\s+(\S+)\s*\)')
 
     component_pos = {}
     pin_wl = {}
-    for i in range(_def.c_num_nets):
-        net_points = []
-        for j in range(nets[i].c_num_pins):
-            instance_name = nets[i].c_instances[j]
-            pin_name = nets[i].c_pins[j]
 
-            s_inst = (
-                str(instance_name, "utf-8")
-                if isinstance(instance_name, bytes)
-                else str(instance_name)
-            )
-            s_pin = (
-                str(pin_name, "utf-8") if isinstance(pin_name, bytes) else str(pin_name)
-            )
-            pin_key = f"{s_inst}/{s_pin}"
+    section = None
+    current_port = None
+    net_buf = None   # accumulates tokens for the current net statement
 
-            comp = component_id.get(instance_name)
-            if comp:
+    with open(file_path) as f:
+        for raw in f:
+            line = raw.strip()
 
-                if pin_key not in component_pos:
-                    component_pos[pin_key] = (comp.c_x, comp.c_y)
-                    net_points.append((comp.c_x, comp.c_y))
+            # ── Section markers ──────────────────────────────────────── #
+            if re.match(r'^COMPONENTS\s+\d+', line):
+                section = 'COMPONENTS'
+                continue
+            if re.match(r'^PINS\s+\d+', line):
+                section = 'PINS'
+                current_port = None
+                continue
+            if re.match(r'^NETS\s+\d+', line):
+                section = 'NETS'
+                net_buf = None
+                continue
+            if re.match(r'^END\s+', line):
+                # flush any open net buffer
+                if net_buf is not None:
+                    _process_net(net_buf, inst_pos, port_pos,
+                                 component_pos, pin_wl, _PAIR_RE)
+                    net_buf = None
+                section = None
+                current_port = None
+                continue
 
-            else:
-                io_pin = pin_id.get(instance_name)
-                if io_pin:
-                    if pin_key not in component_pos:
-                        component_pos[pin_key] = (io_pin.c_x, io_pin.c_y)
-                        net_points.append((io_pin.c_x, io_pin.c_y))
-        if not net_points:
-            wl = 0
-        else:
-            wl = calc_rmst_length_fast(net_points)
+            # ── COMPONENTS ───────────────────────────────────────────── #
+            if section == 'COMPONENTS' and line.startswith('- '):
+                m_name = re.match(r'-\s+(\S+)', line)
+                m_pos  = _PLACED_RE.search(line)
+                if m_name and m_pos:
+                    inst_pos[m_name.group(1)] = (int(m_pos.group(1)),
+                                                  int(m_pos.group(2)))
 
-        for j in range(nets[i].c_num_pins):
-            instance_name = nets[i].c_instances[j]
-            pin_name = nets[i].c_pins[j]
+            # ── PINS ─────────────────────────────────────────────────── #
+            elif section == 'PINS':
+                if line.startswith('- '):
+                    m = re.match(r'-\s+(\S+)', line)
+                    current_port = m.group(1) if m else None
+                if current_port:
+                    m_pos = _PLACED_RE.search(line)
+                    if m_pos:
+                        port_pos[current_port] = (int(m_pos.group(1)),
+                                                   int(m_pos.group(2)))
+                        current_port = None
 
-            s_inst = (
-                str(instance_name, "utf-8")
-                if isinstance(instance_name, bytes)
-                else str(instance_name)
-            )
-            s_pin = (
-                str(pin_name, "utf-8") if isinstance(pin_name, bytes) else str(pin_name)
-            )
+            # ── NETS ─────────────────────────────────────────────────── #
+            elif section == 'NETS':
+                if line.startswith('- '):
+                    # flush previous net
+                    if net_buf is not None:
+                        _process_net(net_buf, inst_pos, port_pos,
+                                     component_pos, pin_wl, _PAIR_RE)
+                    net_buf = line
+                elif net_buf is not None:
+                    net_buf += ' ' + line
 
-            pin_key = f"{s_inst}/{s_pin}"
-            pin_wl[pin_key] = wl
+                # A net statement ending on this line
+                if net_buf is not None and net_buf.rstrip().endswith(';'):
+                    _process_net(net_buf, inst_pos, port_pos,
+                                 component_pos, pin_wl, _PAIR_RE)
+                    net_buf = None
+
     return component_pos, pin_wl
 
 
-if __name__ == "__main__":
+def _process_net(net_str, inst_pos, port_pos, component_pos, pin_wl, pair_re):
+    """Compute RMST for one net statement and update component_pos / pin_wl."""
+    pairs = pair_re.findall(net_str)
+    net_points = []
 
-    path = "/ISPD26-Contest/aes_cipher_top/TCP_250_UTIL_0.40/contest.def"
-    components_pos, pin_wl = read_def(path)
-    print(components_pos)
-    print(pin_wl)
+    for inst, pin in pairs:
+        pin_key = f"{inst}/{pin}"
+        if inst == 'PIN':
+            pos = port_pos.get(pin)
+        else:
+            pos = inst_pos.get(inst)
+        if pos is None:
+            continue
+        component_pos.setdefault(pin_key, pos)
+        net_points.append(pos)
+
+    wl = calc_rmst_length_fast(net_points) if net_points else 0
+    for inst, pin in pairs:
+        pin_key = f"{inst}/{pin}"
+        if pin_key in component_pos:
+            pin_wl[pin_key] = wl
+
+
+if __name__ == "__main__":
+    import sys
+    path = sys.argv[1] if len(sys.argv) > 1 else "contest.def"
+    component_pos, pin_wl = read_def(path)
+    print(f"component_pos entries: {len(component_pos)}")
+    print(f"pin_wl entries:        {len(pin_wl)}")

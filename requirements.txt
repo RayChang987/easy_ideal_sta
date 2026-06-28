@@ -2,3 +2,4 @@ liberty-parser
 numpy
 pandas
 scipy
+PyQt5

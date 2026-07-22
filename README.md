@@ -108,7 +108,7 @@ venv/bin/python main.py \
   aes_cipher_top \
   ISPD26-Contest/aes_cipher_top/TCP_250_UTIL_0.40/contest.sdc \
   ISPD26-Contest/aes_cipher_top/TCP_250_UTIL_0.40/contest.def \
-  resize_result.tcl
+  --no-net-delay
 ```
 
 ### GUI — Interactive layout viewer

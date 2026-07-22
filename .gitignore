@@ -1,0 +1,9 @@
+# python
+.venv/
+__pycache__/
+
+# benchmark
+ISPD26-Contest/
+
+# cli result
+*.pkl

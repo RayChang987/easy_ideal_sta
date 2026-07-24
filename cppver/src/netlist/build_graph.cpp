@@ -11,6 +11,7 @@
 
 namespace easysta::netlist {
 
+using easysta::graph::TimingArc;
 using easysta::graph::TimingGraph;
 using easysta::graph::TimingNode;
 using easysta::liberty::CellInfo;
@@ -105,10 +106,13 @@ TimingGraph build_timing_graph(const std::string& json_file, const std::string& 
             std::string timing_type = parts.size() > 3 ? parts[3] : "None";
 
             if (connections.contains(src_pin) && connections.contains(dst_pin)) {
-                tg.add_arc(
+                TimingArc* arc = tg.add_arc(
                     tg.get_node(inst_name, src_pin, cell_type),
                     tg.get_node(inst_name, dst_pin, cell_type),
                     "cell", 0.0, when, timing_type);
+                // cell_db (and thus &kv.second) outlives the graph: it's
+                // owned in main() for the whole run.
+                arc->cell_arc_def = &kv.second;
             }
         }
 

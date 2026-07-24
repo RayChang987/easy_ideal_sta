@@ -109,4 +109,25 @@ bool TimingGraph::find_cycle() {
     return false;
 }
 
+std::vector<std::vector<TimingNode*>> levelize(const std::vector<TimingNode*>& topo_order) {
+    std::unordered_map<TimingNode*, int> level;
+    level.reserve(topo_order.size());
+
+    int max_level = -1;
+    for (TimingNode* node : topo_order) {
+        int lvl = 0;
+        for (TimingArc* arc : node->fanin) {
+            lvl = std::max(lvl, level.at(arc->src) + 1);
+        }
+        level[node] = lvl;
+        max_level = std::max(max_level, lvl);
+    }
+
+    std::vector<std::vector<TimingNode*>> levels(max_level + 1);
+    for (TimingNode* node : topo_order) {
+        levels[level.at(node)].push_back(node);
+    }
+    return levels;
+}
+
 } // namespace easysta::graph

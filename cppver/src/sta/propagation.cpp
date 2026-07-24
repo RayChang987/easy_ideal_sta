@@ -7,6 +7,7 @@
 #include <limits>
 #include <unordered_set>
 
+#include "easysta/graph/timing_graph.hpp"
 #include "easysta/graph/timing_table.hpp"
 
 namespace easysta::sta {
@@ -57,6 +58,21 @@ const std::string& resolve_type(const TimingNode* node, const TypeToCells& type_
     return node->type;
 }
 
+// Fast path: arc->cell_arc_def was resolved once at graph-build time.
+// Falls back to the by-key hashmap lookup only for resizable nodes, whose
+// effective cell type (and thus timing-arc def) can differ from the one
+// baked into the arc at build time.
+const liberty::TimingArcDef& resolve_arc_def(TimingArc* arc, TimingNode* dst_node,
+                                              const std::string& src_type,
+                                              const std::unordered_map<std::string, CellInfo>& cell_db) {
+    if (arc->cell_arc_def != nullptr && !arc->src->sizable) {
+        return *arc->cell_arc_def;
+    }
+    std::string key = arc->src->pin + "/" + dst_node->pin + "/" + arc->when;
+    if (arc->timing_type != "None") key += "/" + arc->timing_type;
+    return cell_db.at(src_type).timing_arcs.at(key);
+}
+
 } // namespace
 
 double calculate_node(TimingNode* node,
@@ -101,10 +117,7 @@ double calculate_node(TimingNode* node,
             fall_candidates.emplace_back(src_node->fall_at + net_delay, net_delay, src_node->fall_slew);
 
         } else if (arc->arc_type == "cell") {
-            std::string key = arc->src->pin + "/" + node->pin + "/" + arc->when;
-            if (arc->timing_type != "None") key += "/" + arc->timing_type;
-
-            const auto& arc_def = cell_db.at(src_type).timing_arcs.at(key);
+            const auto& arc_def = resolve_arc_def(arc, node, src_type, cell_db);
             const auto& timing_table = arc_def.timing_tables;
             const std::string& timing_sense = arc_def.timing_sense;
             double output_cap = node->load;
@@ -295,17 +308,23 @@ std::vector<std::pair<TimingNode*, double>> calculate_delay(
         }
     }
 
-    for (TimingNode* node : topo_order) {
-        if (node->fanin.empty()) continue;
-        double slack = calculate_node(node, cell_db, sdc_data, inst_to_clocks, type_to_cells, net_wl);
-        if (slack < 0) {
-            tns += slack;
-            if (worst_node == nullptr || slack < wns) {
-                worst_node = node;
-                wns = slack;
-            }
-            if (node->fanout.empty()) {
-                violation_end_points.emplace_back(node, slack);
+    // Nodes within one level have no dependency on each other (see
+    // graph::levelize()); this is the loop a parallel dispatch — host
+    // thread pool today, GPU wavefront kernel later — would split per
+    // level. It's still a plain sequential walk here.
+    for (const auto& level : graph::levelize(topo_order)) {
+        for (TimingNode* node : level) {
+            if (node->fanin.empty()) continue;
+            double slack = calculate_node(node, cell_db, sdc_data, inst_to_clocks, type_to_cells, net_wl);
+            if (slack < 0) {
+                tns += slack;
+                if (worst_node == nullptr || slack < wns) {
+                    worst_node = node;
+                    wns = slack;
+                }
+                if (node->fanout.empty()) {
+                    violation_end_points.emplace_back(node, slack);
+                }
             }
         }
     }

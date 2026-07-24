@@ -36,4 +36,13 @@ public:
     bool find_cycle();
 };
 
+// Groups an already-computed topological order into levels: every node's
+// fanin lives in a strictly earlier level, so nodes within the same level
+// have no dependency on each other and calculate_node() calls over one
+// level are safe to run in parallel. This is the batching boundary a
+// host-side thread pool (OpenMP/TBB) or a future GPU wavefront dispatch
+// (one kernel launch per level) would use; today calculate_delay() still
+// walks each level's nodes sequentially.
+std::vector<std::vector<TimingNode*>> levelize(const std::vector<TimingNode*>& topo_order);
+
 } // namespace easysta::graph

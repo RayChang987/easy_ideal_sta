@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 
+namespace easysta::liberty {
+struct TimingArcDef;
+} // namespace easysta::liberty
+
 namespace easysta::graph {
 
 struct TimingArc;
@@ -54,6 +58,16 @@ struct TimingArc {
     double fall_delay;
     std::string when;
     std::string timing_type;
+
+    // Resolved once at graph-build time (build_timing_graph already has the
+    // matching TimingArcDef in hand while wiring up "cell" arcs), so the
+    // per-node delay calculation hot path never repeats the
+    // string-concat + hashmap-lookup that finding it by key would cost.
+    // Null for "net" arcs. Only trustworthy when !src->sizable: a resizable
+    // node's effective cell type can change after this arc was built, so
+    // that path re-resolves by key instead (see resolve_arc_def() in
+    // propagation.cpp).
+    const liberty::TimingArcDef* cell_arc_def = nullptr;
 
     TimingArc(TimingNode* src_, TimingNode* dst_, std::string arc_type_,
               double delay = 0.0, std::string when_ = "None",

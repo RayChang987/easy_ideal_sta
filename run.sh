@@ -7,11 +7,14 @@ TESTCASE="${TESTCASE:-aes_cipher_top}"
 CONFIG="${CONFIG:-}"
 OUTPUT_TCL="resize_result.tcl"
 GUI=false
+USE_UV=false
+VENV_DIR=".venv"
 
 usage() {
-    echo "Usage: $0 [-t|--testcase NAME] [-g|--gui]"
+    echo "Usage: $0 [-t|--testcase NAME] [-g|--gui] [--uv]"
     echo "  -t, --testcase NAME  Testcase under ISPD26-Contest/ to run (default: aes_cipher_top)"
     echo "  -g, --gui            Launch the GUI viewer after the CLI run (default: off)"
+    echo "      --uv             Use uv for dependency management and execution (default: off, uses python/pip)"
     exit 1
 }
 
@@ -19,14 +22,28 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -t|--testcase) TESTCASE="$2"; shift 2 ;;
         -g|--gui) GUI=true; shift ;;
+        --uv) USE_UV=true; shift ;;
         -h|--help) usage ;;
         *) echo "Unknown option: $1"; usage ;;
     esac
 done
 
 # ---- 1. sync dependencies ----------------------------------------------
-echo "==> uv sync"
-uv sync
+if [[ "$USE_UV" == true ]]; then
+    echo "==> uv sync"
+    uv sync
+    RUN_PY=(uv run python)
+else
+    if [[ ! -d "$VENV_DIR" ]]; then
+        echo "==> Creating venv at ${VENV_DIR}"
+        python3 -m venv "$VENV_DIR"
+    fi
+    # shellcheck disable=SC1091
+    source "${VENV_DIR}/bin/activate"
+    echo "==> pip install -r requirements.txt"
+    pip install -q -r requirements.txt
+    RUN_PY=(python3)
+fi
 
 # ---- 2. fetch benchmark data if missing --------------------------------
 if [[ ! -d "ISPD26-Contest" ]]; then
@@ -80,10 +97,10 @@ fi
 
 # ---- 4. CLI: run STA -----------------------------------------------------
 echo "==> Running CLI STA on ${TESTCASE}/${CONFIG}"
-uv run python main.py "$JSON_FILE" "$TESTCASE" "$SDC_FILE" "$DEF_FILE" "$OUTPUT_TCL"
+"${RUN_PY[@]}" main.py "$JSON_FILE" "$TESTCASE" "$SDC_FILE" "$DEF_FILE" "$OUTPUT_TCL"
 
 # ---- 5. GUI (opt-in) ------------------------------------------------------
 if [[ "$GUI" == true ]]; then
     echo "==> Launching GUI viewer"
-    uv run python gui_viewer.py "$JSON_FILE" "$SDC_FILE" "$DEF_FILE"
+    "${RUN_PY[@]}" gui_viewer.py "$JSON_FILE" "$SDC_FILE" "$DEF_FILE"
 fi

@@ -50,7 +50,7 @@ if [[ ! -d "ISPD26-Contest/${TESTCASE}" ]]; then
 fi
 
 if [[ -z "$CONFIG" ]]; then
-    CONFIG="$(find "ISPD26-Contest/${TESTCASE}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort | head -n1)"
+    CONFIG="$(find "ISPD26-Contest/${TESTCASE}" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | head -n1)"
 fi
 if [[ -z "$CONFIG" ]]; then
     echo "[Error] No config subdirectory found under ISPD26-Contest/${TESTCASE}/"

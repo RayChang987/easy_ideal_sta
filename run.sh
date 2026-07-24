@@ -95,9 +95,13 @@ else
     docker image rm -f hdlc/yosys:latest >/dev/null
 fi
 
-# ---- 4. CLI: run STA -----------------------------------------------------
-echo "==> Running CLI STA on ${TESTCASE}/${CONFIG}"
-"${RUN_PY[@]}" main.py "$JSON_FILE" "$TESTCASE" "$SDC_FILE" "$DEF_FILE" "$OUTPUT_TCL"
+# ---- 4. CLI: run STA (skipped when --gui, which runs its own STA pass) ---
+if [[ "$GUI" == true ]]; then
+    echo "==> --gui set, skipping CLI STA run"
+else
+    echo "==> Running CLI STA on ${TESTCASE}/${CONFIG}"
+    "${RUN_PY[@]}" main.py "$JSON_FILE" "$TESTCASE" "$SDC_FILE" "$DEF_FILE" "$OUTPUT_TCL"
+fi
 
 # ---- 5. GUI (opt-in) ------------------------------------------------------
 if [[ "$GUI" == true ]]; then

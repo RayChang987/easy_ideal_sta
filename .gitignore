@@ -7,3 +7,6 @@ ISPD26-Contest/
 
 # cli result
 *.pkl
+
+# cppver build output
+cppver/build/

@@ -5,7 +5,6 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 # ---- config -----------------------------------------------------------
 TESTCASE="${TESTCASE:-aes_cipher_top}"
 CONFIG="${CONFIG:-}"
-OUTPUT_TCL="resize_result.tcl"
 GUI=false
 USE_UV=false
 VENV_DIR=".venv"
@@ -100,7 +99,7 @@ if [[ "$GUI" == true ]]; then
     echo "==> --gui set, skipping CLI STA run"
 else
     echo "==> Running CLI STA on ${TESTCASE}/${CONFIG}"
-    "${RUN_PY[@]}" main.py "$JSON_FILE" "$TESTCASE" "$SDC_FILE" "$DEF_FILE" "$OUTPUT_TCL"
+    "${RUN_PY[@]}" main.py "$JSON_FILE" "$TESTCASE" "$SDC_FILE" "$DEF_FILE"
 fi
 
 # ---- 5. GUI (opt-in) ------------------------------------------------------
